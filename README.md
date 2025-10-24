@@ -2,9 +2,9 @@
 
 A collection of Home Assistant automation blueprints and custom components.
 
-## 🏠 Available Blueprints
+## Available Blueprints
 
-### Better Thermostat Control
+### 🌡️ Better Thermostat Control
 
 **Better Thermostat – Raumheizungssteuerung (Lean)**
 
@@ -17,31 +17,7 @@ A minimal, room-based heating control for Better Thermostat. This blueprint deli
 - Night mode support
 - Optional boost, eco, and activity triggers
 
-## 📥 Installation
-
-### Method 1: Direct Import (Recommended)
-
-1. Go to **Settings** → **Automations & Scenes** → **Blueprints**
-2. Click **Import Blueprint**
-3. Copy and paste this URL:
-   ```
-   https://raw.githubusercontent.com/n3roGit/MyHomeAssistantMods/main/automation/BetterThermostatControl/BetterThermostat_RoomHeatControl_Lean.yaml
-   ```
-4. Click **Import**
-
-### Method 2: HACS (Community Store)
-
-1. Install [HACS](https://hacs.xyz/) if not already installed
-2. Go to **HACS** → **Frontend** → **Explore & Download Repositories**
-3. Search for "My Home Assistant Mods" or add this repository manually
-4. Install and restart Home Assistant
-
-### Method 3: Manual Download
-
-1. Download the blueprint file from this repository
-2. Go to **Settings** → **Automations & Scenes** → **Blueprints**
-3. Click **Import Blueprint**
-4. Upload the downloaded file
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A//raw.githubusercontent.com/n3roGit/MyHomeAssistantMods/main/automation/BetterThermostatControl/BetterThermostat_RoomHeatControl_Lean.yaml)
 
 ## 🔧 Requirements
 
