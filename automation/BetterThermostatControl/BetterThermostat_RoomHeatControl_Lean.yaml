@@ -1,0 +1,215 @@
+blueprint:
+  name: Better Thermostat – Raumheizungssteuerung (Lean)
+  description: >
+    Minimale, raumbezogene Heizungssteuerung für Better Thermostat.
+    Dieses Blueprint verzichtet bewusst auf Fenster-/Außen-/Min-Temp-Logik,
+    da Better Thermostat diese Szenarien bereits abdeckt.
+    
+    Verwendete Presets (in Prioritätsreihenfolge):
+    • boost: Höchste Priorität, bei Boost-Trigger aktiviert
+    • sleep: Bei aktiviertem Nachtmodus
+    • away: Wenn niemand zuhause ist
+    • eco: Bei aktiviertem Eco-Trigger (optional)
+    • activity: Bei aktiviertem Aktivitäts-Trigger für hohen Bedarf
+    • comfort: Bei Bewegung im Raum
+    • home: Standard-Preset für normale Anwesenheit
+    
+    Voraussetzung: Das ausgewählte Klima-Gerät wird von Better Thermostat bereitgestellt.
+  domain: automation
+  source_url: https://github.com/n3roGit/MyHomeAssistantMods
+  input:
+    climate_device:
+      name: Klima-Gerät (Better Thermostat)
+      description: Wähle das Better Thermostat Gerät zur Steuerung
+      selector:
+        device:
+          integration: better_thermostat
+
+    presence_group:
+      name: Anwesenheitsgruppe (Zuhause/Abwesend)
+      description: Helper/Gruppe, die AN/ZUHAUSE ist, wenn jemand Zuhause ist. Schaltet zwischen "away" (niemand da) und "home" (jemand da).
+      selector:
+        entity:
+          filter:
+            - domain:
+                - input_boolean
+                - binary_sensor
+                - person
+                - device_tracker
+
+    motion_group:
+      name: Bewegungsgruppe (binär)
+      description: Helper/Gruppe, die AN ist, wenn es Bewegung in diesem Raum gibt. Aktiviert "comfort" bei Bewegung.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+
+    night_mode_entity:
+      name: Nachtmodus (boolesch)
+      description: Wenn AN, nutze Abwesend-Temperatur unabhängig von Anwesenheit/Bewegung. Aktiviert "sleep" Preset.
+      selector:
+        entity:
+          filter:
+            - domain:
+                - input_boolean
+                - binary_sensor
+
+    enable_switch:
+      name: Automation aktivieren (boolesch)
+      description: Wenn AN, läuft die Automation; wenn AUS, macht sie nichts
+      selector:
+        entity:
+          filter:
+            - domain:
+                - input_boolean
+                - binary_sensor
+
+    boost_entity:
+      name: Boost-Trigger (optional)
+      description: Wenn AN, setze Preset "boost" mit höchster Priorität (überschreibt alle anderen Presets)
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain:
+              - input_boolean
+              - binary_sensor
+
+    eco_entity:
+      name: Eco-Trigger (optional)
+      description: Wenn AN (und kein Boost/Nacht/Abwesend), setze Preset "eco" für Energiesparmodus
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain:
+              - input_boolean
+              - binary_sensor
+
+    activity_entity:
+      name: Aktivitäts-Trigger (optional)
+      description: Wenn AN (und kein Boost/Nacht/Abwesend/Eco), setze Preset "activity" für hohe Aktivität
+      default: ""
+      selector:
+        entity:
+          filter:
+            - domain:
+              - input_boolean
+              - binary_sensor
+
+
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  climate_device: !input climate_device
+  # Resolve the primary climate entity from the selected Better Thermostat device
+  climate_entity: >
+    {% set dev = climate_device %}
+    {% set ents = device_entities(dev) | select('match', '^climate\\.') | list %}
+    {{ (ents | first) if ents | count > 0 else '' }}
+  presence_group: !input presence_group
+  motion_group: !input motion_group
+  night_mode_entity: !input night_mode_entity
+  enable_switch: !input enable_switch
+
+  boost_entity: !input boost_entity
+  eco_entity: !input eco_entity
+  activity_entity: !input activity_entity
+
+  someone_home: >
+    {% set s = states(presence_group) %}
+    {{ s in ['on','home','true','occupied'] }}
+
+  motion_on: >
+    {{ is_state(motion_group, 'on') }}
+
+  motion_effective: >
+    {{ motion_on }}
+
+  night_mode: >
+    {{ is_state(night_mode_entity, 'on') }}
+
+  enabled: >
+    {{ is_state(enable_switch, 'on') }}
+
+  boost_on: >
+    {{ is_state(boost_entity, 'on') if boost_entity else false }}
+
+  eco_on: >
+    {{ is_state(eco_entity, 'on') if eco_entity else false }}
+
+  activity_on: >
+    {{ is_state(activity_entity, 'on') if activity_entity else false }}
+
+  # Ziel-Preset nach Priorität:
+  # 1) Boost → boost
+  # 2) Nachtmodus → sleep
+  # 3) Niemand Zuhause → away
+  # 4) Eco an → eco
+  # 5) Aktivität → activity
+  # 6) Bewegung → comfort
+  # 7) Sonst → home
+  target_preset: >
+    {% if boost_on %}
+      boost
+    {% elif night_mode %}
+      sleep
+    {% elif not someone_home %}
+      away
+    {% elif eco_on %}
+      eco
+    {% elif activity_on %}
+      activity
+    {% elif motion_effective | bool %}
+      comfort
+    {% else %}
+      home
+    {% endif %}
+
+  # Fallback-Temperatur für Better Thermostat ohne Presets
+  target_temp: >
+    {% if night_mode %}
+      18
+    {% elif not someone_home %}
+      16
+    {% elif motion_effective | bool %}
+      21
+    {% else %}
+      20
+    {% endif %}
+
+  
+
+  
+trigger:
+  - platform: state
+    entity_id: !input presence_group
+  - platform: state
+    entity_id: !input motion_group
+  - platform: state
+    entity_id: !input night_mode_entity
+  - platform: time_pattern
+    minutes: "/1"
+
+condition:
+  - condition: template
+    value_template: "{{ enabled }}"
+
+action:
+  - service: climate.set_preset_mode
+    target:
+      entity_id: "{{ climate_entity }}"
+    data:
+      preset_mode: "{{ target_preset }}"
+
+# CHANGE: 2025-10-15 Initial lean blueprint for Better Thermostat only
+# CHANGE: 2025-10-20 Übersetzungen (de) für Namen und Beschreibungen
+# CHANGE: 2025-10-20 Fix timing: reduce time pattern from 1 min to 10 sec
+# CHANGE: 2025-10-21 Switch to presets (sleep/away/eco/comfort/home + boost), add inputs
+# CHANGE: 2025-10-21 Add activity preset trigger
+# CHANGE: 2025-10-21 Remove idle_preset option; fallback is always "home"
+# CHANGE: 2025-10-21 Adjust rule timer to 1 minute to reduce preset resets
+
