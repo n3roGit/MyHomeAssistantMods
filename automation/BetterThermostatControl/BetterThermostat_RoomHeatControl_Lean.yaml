@@ -15,8 +15,13 @@ blueprint:
     • home: Standard-Preset für normale Anwesenheit
     
     Voraussetzung: Das ausgewählte Klima-Gerät wird von Better Thermostat bereitgestellt.
+
+    set_preset_mode wird nur ausgeführt, wenn sich das Ziel-Preset vom aktuellen
+    preset_mode unterscheidet — manuelle Solltemperatur bleibt erhalten, bis ein
+    anderes Preset fällig ist (Wechsel zurück lädt die in Better Thermostat
+    hinterlegte Preset-Temperatur).
   domain: automation
-  source_url: https://github.com/n3roGit/MyHomeAssistantMods
+  source_url: source_url: https://github.com/n3roGit/MyHomeAssistantMods
   input:
     climate_device:
       name: Klima-Gerät (Better Thermostat)
@@ -64,6 +69,35 @@ blueprint:
             - domain:
                 - input_boolean
                 - binary_sensor
+
+    writeback_enable:
+      name: Temperatur-Writeback aktivieren
+      description: >
+        Wenn aktiv, werden manuell geänderte Zieltemperaturen in die passende Better Thermostat Preset-
+        Temperatur `number`-Entität für das aktuelle `preset_mode` zurückgeschrieben (nur wenn das aktuelle
+        Preset bereits dem `target_preset` entspricht).
+      default: false
+      selector:
+        boolean: {}
+
+    writeback_bounds_enable:
+      name: Writeback-Grenzen aktivieren
+      description: >
+        Wenn aktiv, wird nur dann in die Preset-`number`-Entität geschrieben, wenn die manuell eingestellte
+        Temperatur innerhalb der festen min/max Werte des jeweiligen Presets liegt. Liegt sie außerhalb, wird
+        nichts geschrieben (die Thermostat-Temperatur bleibt manuell stehen, bis das Preset wechselt).
+
+        Grenzen (fix):
+        away: 16–19 °C
+        sleep: 16–19 °C
+        eco: 16–20 °C
+        home: 19–23 °C
+        comfort: 20–25 °C
+        activity: 20–25 °C
+        boost: 22–26 °C
+      default: false
+      selector:
+        boolean: {}
 
     boost_entity:
       name: Boost-Trigger (optional)
@@ -114,6 +148,8 @@ variables:
   motion_group: !input motion_group
   night_mode_entity: !input night_mode_entity
   enable_switch: !input enable_switch
+  writeback_enable: !input writeback_enable
+  writeback_bounds_enable: !input writeback_bounds_enable
 
   boost_entity: !input boost_entity
   eco_entity: !input eco_entity
@@ -199,11 +235,77 @@ condition:
     value_template: "{{ enabled }}"
 
 action:
-  - service: climate.set_preset_mode
-    target:
-      entity_id: "{{ climate_entity }}"
-    data:
-      preset_mode: "{{ target_preset }}"
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: "{% set ent = climate_entity | default('', true) | string | trim %}{% set cur = state_attr(ent, 'preset_mode') | default('', true) | string | trim | lower %}{% set tgt = target_preset | default('', true) | string | trim | lower %}{{ ent != '' and cur != tgt }}"
+      sequence:
+      - service: climate.set_preset_mode
+        target:
+          entity_id: "{{ climate_entity }}"
+        data:
+          preset_mode: "{{ target_preset }}"
+    - conditions:
+      - condition: template
+        value_template: "{% set ent = climate_entity | default('', true) | string | trim %}{% set cur = state_attr(ent, 'preset_mode') | default('', true) | string | trim | lower %}{% set tgt = target_preset | default('', true) | string | trim | lower %}{{ ent != '' and (writeback_enable | bool) and cur == tgt }}"
+      sequence:
+        - variables:
+            ent: "{{ climate_entity | default('', true) | string | trim }}"
+            cur_preset: "{{ state_attr(climate_entity, 'preset_mode') | default('', true) | string | trim | lower }}"
+            tgt_preset: "{{ target_preset | default('', true) | string | trim | lower }}"
+            climate_base: "{{ (climate_entity | default('', true) | string | trim) | replace('climate.','') }}"
+            preset_number: "{{ 'number.' ~ climate_base ~ '_preset_' ~ tgt_preset }}"
+            manual_temp: "{{ state_attr(climate_entity, 'temperature') }}"
+            bounds_min: >
+              {% if tgt_preset == 'away' %}16
+              {% elif tgt_preset == 'sleep' %}16
+              {% elif tgt_preset == 'eco' %}16
+              {% elif tgt_preset == 'home' %}19
+              {% elif tgt_preset == 'comfort' %}20
+              {% elif tgt_preset == 'activity' %}20
+              {% elif tgt_preset == 'boost' %}22
+              {% else %}-999{% endif %}
+            bounds_max: >
+              {% if tgt_preset == 'away' %}19
+              {% elif tgt_preset == 'sleep' %}19
+              {% elif tgt_preset == 'eco' %}20
+              {% elif tgt_preset == 'home' %}23
+              {% elif tgt_preset == 'comfort' %}25
+              {% elif tgt_preset == 'activity' %}25
+              {% elif tgt_preset == 'boost' %}26
+              {% else %}999{% endif %}
+        - choose:
+          - conditions:
+            - condition: template
+              value_template: >-
+                {{
+                  preset_number != '' and
+                  manual_temp is not none and
+                  states(preset_number) not in ['unknown','unavailable'] and
+                  (
+                    not (writeback_bounds_enable | bool) or
+                    (
+                      (manual_temp | float) >= (bounds_min | float) and
+                      (manual_temp | float) <= (bounds_max | float)
+                    )
+                  )
+                }}
+            sequence:
+              - condition: template
+                value_template: "{{ (manual_temp | float) != (states(preset_number) | float) }}"
+              - service: number.set_value
+                target:
+                  entity_id: "{{ preset_number }}"
+                data:
+                  value: "{{ manual_temp }}"
+          default:
+            - service: system_log.write
+              data:
+                level: warning
+                logger: better_thermostat.writeback
+                message: >
+                  Temperatur-Writeback angefordert, aber die passende Preset-`number`-Entität wurde nicht gefunden: {{ preset_number }}
+    default: []
 
 # CHANGE: 2025-10-15 Initial lean blueprint for Better Thermostat only
 # CHANGE: 2025-10-20 Übersetzungen (de) für Namen und Beschreibungen
@@ -212,4 +314,10 @@ action:
 # CHANGE: 2025-10-21 Add activity preset trigger
 # CHANGE: 2025-10-21 Remove idle_preset option; fallback is always "home"
 # CHANGE: 2025-10-21 Adjust rule timer to 1 minute to reduce preset resets
+# CHANGE: 2026-03-28 Only call set_preset_mode when target preset differs from current
+#   preset_mode so manual target temperature is not reset every minute.
+#
+# CHANGE: 2026-03-30 Optionales Temperatur-Writeback für manuelle Temperaturänderungen
+#
+# CHANGE: 2026-03-30 Writeback optional mit festen min/max Grenzen je Preset abgesichert
 
