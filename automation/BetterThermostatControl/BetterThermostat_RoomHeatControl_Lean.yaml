@@ -21,7 +21,7 @@ blueprint:
     anderes Preset fällig ist (Wechsel zurück lädt die in Better Thermostat
     hinterlegte Preset-Temperatur).
   domain: automation
-  source_url: source_url: https://github.com/n3roGit/MyHomeAssistantMods
+  source_url: https://github.com/n3roGit/MyHomeAssistantMods
   input:
     climate_device:
       name: Klima-Gerät (Better Thermostat)
