@@ -26,7 +26,14 @@ The climate entity is taken automatically from the selected Better Thermostat **
 - Optional **temperature writeback**: when enabled, manual changes to the target temperature can be written to the matching Better Thermostat preset `number.*` entity for the current preset (only while `preset_mode` already matches the computed target)
 - Optional **writeback bounds**: if enabled, writeback only happens when the manual temperature lies within fixed min/max ranges per preset (see table below); otherwise the thermostat keeps the manual value until the preset changes
 
+#### Import (My Home Assistant)
+
+The easiest way to add this blueprint is a **one-click import** via [My Home Assistant](https://my.home-assistant.io/): it opens your instance’s blueprint import dialog with the blueprint URL already filled in—you do not need to browse the GitHub folder structure or copy paths manually.
+
 [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A//raw.githubusercontent.com/n3roGit/MyHomeAssistantMods/main/automation/BetterThermostatControl/BetterThermostat_RoomHeatControl_Lean.yaml)
+
+- **Raw YAML** (for manual import or validation): `https://raw.githubusercontent.com/n3roGit/MyHomeAssistantMods/main/automation/BetterThermostatControl/BetterThermostat_RoomHeatControl_Lean.yaml`
+- **Build your own redirect** (e.g. after forking or changing branches): [Create a link – My Home Assistant](https://my.home-assistant.io/create-link/?redirect=blueprint_import) — choose redirect **blueprint_import** and paste the raw GitHub URL of the `.yaml` file.
 
 ## 🔧 Requirements
 
@@ -89,6 +96,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Links
 
 - [Home Assistant](https://www.home-assistant.io/)
+- [My Home Assistant](https://my.home-assistant.io/) — one-click deep links into your instance (e.g. blueprint import)
 - [Better Thermostat](https://github.com/KartoffelToby/better_thermostat)
 - [HACS](https://hacs.xyz/)
 
